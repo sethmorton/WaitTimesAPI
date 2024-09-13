@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
   import { onMount } from "svelte";
   import Fa from "svelte-fa";
   import {
@@ -8,52 +8,91 @@
   } from "@fortawesome/free-solid-svg-icons";
   import { DateTime } from "luxon";
 
-  let selectedPort = "sanYsidro";
-  let waitTimes = {
-    allTraffic: { time: "Loading...", comparison: "Loading..." },
-    sentri: { time: "Loading...", comparison: "Loading..." },
-    readyLane: { time: "Loading...", comparison: "Loading..." },
-  };
-  let lastUpdated = "Loading...";
-  let borderCrossingStats = {
-    totalTravelers: "Loading...",
-    vehicles: "Loading...",
-    cargoTrucks: "Loading...",
-  };
-  let fiscalYear = "Loading...";
-  let isLoading = true;
+  import type {
+    LaneInfo,
+    WaitTime,
+    WaitTimes,
+    PortInfo,
+    BorderCrossingStats,
+  } from "$lib/types";
 
-  const portInfo = {
+  const PORT_INFO: Record<string, PortInfo> = {
     sanYsidro: { name: "San Ysidro", number: 250401 },
     calexicoEast: { name: "Calexico East", number: 250301 },
     otayMesa: { name: "Otay Mesa", number: 250601 },
   };
 
-  const laneInfo = [
+  const LANE_INFO: LaneInfo[] = [
     { name: "All Traffic", laneType: 0, key: "allTraffic" },
     { name: "Sentri", laneType: 1, key: "sentri" },
     { name: "Ready Lane", laneType: 2, key: "readyLane" },
   ];
 
+  let selectedPort: keyof typeof PORT_INFO = "sanYsidro";
+  let previousPort: keyof typeof PORT_INFO = selectedPort;
+  let isInitialLoad = true;
+  let isLoadingPortSelection = false;
+
+  let waitTimes: WaitTimes = {
+    allTraffic: createInitialWaitTime(),
+    sentri: createInitialWaitTime(),
+    readyLane: createInitialWaitTime(),
+  };
+
+  let lastUpdated = "Loading...";
+  let isLastUpdatedLoading = true;
+  let borderCrossingStats: BorderCrossingStats =
+    createInitialBorderCrossingStats();
+  let fiscalYear = "Loading...";
+  let isFiscalYearLoading = true;
+
   onMount(async () => {
-    await fetchAndUpdateWaitTimes();
-    await updateBorderCrossingStats();
-    isLoading = false;
+    await loadData();
+    isInitialLoad = false;
   });
 
-  async function fetchAndUpdateWaitTimes() {
-    try {
-      const currentData = await fetchCurrentWaitTimes();
-      const sixMonthData = await fetchSixMonthData();
-      updateCurrentWaitTimes(currentData);
-      updateWithSixMonthAverage(sixMonthData, currentData);
-    } catch (error) {
-      console.error("Error fetching wait times:", error);
-      showErrorState();
+  $: {
+    if (!isInitialLoad && selectedPort !== previousPort) {
+      // Reset loading states
+      isLastUpdatedLoading = true;
+      isFiscalYearLoading = true;
+      waitTimes = {
+        allTraffic: createInitialWaitTime(),
+        sentri: createInitialWaitTime(),
+        readyLane: createInitialWaitTime(),
+      };
+      borderCrossingStats = createInitialBorderCrossingStats();
+
+      loadData();
+      previousPort = selectedPort;
     }
   }
 
-  async function fetchCurrentWaitTimes() {
+  async function loadData(): Promise<void> {
+    isLoadingPortSelection = true;
+    try {
+      await Promise.all([
+        fetchAndUpdateWaitTimes(),
+        updateBorderCrossingStats(),
+      ]);
+    } finally {
+      isLoadingPortSelection = false;
+    }
+  }
+
+  async function fetchAndUpdateWaitTimes(): Promise<void> {
+    try {
+      const currentData = await fetchCurrentWaitTimes();
+      updateCurrentWaitTimes(currentData);
+      const sixMonthData = await fetchSixMonthData();
+      updateWithSixMonthAverage(sixMonthData, currentData);
+    } catch (error) {
+      console.error("Error fetching wait times:", error);
+      // Implement error handling UI update here
+    }
+  }
+
+  async function fetchCurrentWaitTimes(): Promise<any[]> {
     const apiUrl =
       "https://us-west1-ssp-all-sites.cloudfunctions.net/waitTimesData";
     const response = await fetch(apiUrl);
@@ -62,11 +101,11 @@
       throw new Error(data.error);
     }
     return data.data.filter(
-      (item) => item.port_num === portInfo[selectedPort].number
+      (item: any) => item.port_num === PORT_INFO[selectedPort].number
     );
   }
 
-  async function fetchSixMonthData() {
+  async function fetchSixMonthData(): Promise<any[]> {
     const endDate = DateTime.now();
     const startDate = endDate.minus({ months: 6 });
     const apiUrl = constructApiUrl(startDate, endDate);
@@ -78,32 +117,40 @@
     return data.data;
   }
 
-  function constructApiUrl(startDate, endDate) {
+  function constructApiUrl(startDate: DateTime, endDate: DateTime): string {
     const baseUrl =
       "https://us-west1-ssp-all-sites.cloudfunctions.net/waitTimesData";
     const params = new URLSearchParams({
       startDate: startDate.toFormat("yyyy-MM-dd"),
       endDate: endDate.toFormat("yyyy-MM-dd"),
-      portNum: portInfo[selectedPort].number.toString(),
+      portNum: PORT_INFO[selectedPort].number.toString(),
       rowCount: "1000000",
     });
     return `${baseUrl}?${params.toString()}`;
   }
-  function updateCurrentWaitTimes(data) {
-    laneInfo.forEach((info) => {
+
+  function updateCurrentWaitTimes(data: any[]): void {
+    LANE_INFO.forEach((info) => {
       const currentData = data.find((item) => item.lane_type === info.laneType);
       if (currentData) {
         const waitTime = Math.round(currentData.delay_seconds / 60);
-        waitTimes[info.key].time = `${waitTime} minutes`;
+        waitTimes[info.key].duration = `${waitTime} minutes`;
+        waitTimes[info.key].isDurationLoading = false;
         lastUpdated = formatDate(new Date(currentData.daterecorded));
+        isLastUpdatedLoading = false;
       } else {
-        waitTimes[info.key].time = "N/A";
+        waitTimes[info.key].duration = "N/A";
+        waitTimes[info.key].isDurationLoading = false;
       }
     });
+    waitTimes = { ...waitTimes };
   }
 
-  function updateWithSixMonthAverage(sixMonthData, currentData) {
-    laneInfo.forEach((info) => {
+  function updateWithSixMonthAverage(
+    sixMonthData: any[],
+    currentData: any[]
+  ): void {
+    LANE_INFO.forEach((info) => {
       const laneData = sixMonthData.filter(
         (item) => item.lane_type === info.laneType
       );
@@ -122,38 +169,36 @@
       } else {
         waitTimes[info.key].comparison = "N/A";
       }
+      waitTimes[info.key].isComparisonLoading = false;
     });
+    waitTimes = { ...waitTimes };
   }
-  function calculateSixMonthAverage(data) {
+
+  function calculateSixMonthAverage(data: any[]): number | null {
     if (data.length === 0) return null;
     const sum = data.reduce((acc, item) => acc + item.delay_seconds, 0);
     return Math.round(sum / data.length);
   }
 
-  function formatDate(timestamp) {
+  function formatDate(timestamp: Date): string {
     const date = DateTime.fromJSDate(timestamp).toUTC();
     return date.toFormat("h:mm a MM/dd/yy");
   }
 
-  function calculatePercentChange(averageValue, currentValue) {
+  function calculatePercentChange(
+    averageValue: number,
+    currentValue: number
+  ): number {
     return averageValue !== 0
       ? ((currentValue - averageValue) / averageValue) * 100
       : 0;
   }
 
-  async function updateBorderCrossingStats() {
-    const {
-      startDate,
-      endDate,
-      fiscalYear: fy,
-    } = calculatePreviousFiscalYearDates();
-    const data = await fetchBTSData(startDate, endDate);
-    const stats = calculateCrossings(data);
-    updateStatsUI(stats);
-    fiscalYear = fy;
-  }
-
-  function calculatePreviousFiscalYearDates() {
+  function calculatePreviousFiscalYearDates(): {
+    startDate: string;
+    endDate: string;
+    fiscalYear: string;
+  } {
     const currentDate = DateTime.now();
     let fyEnd = DateTime.local(currentDate.year - 1, 9, 30);
     let fyStart = fyEnd.minus({ years: 1 }).plus({ days: 1 });
@@ -170,13 +215,16 @@
     };
   }
 
-  async function fetchBTSData(startDate, endDate) {
+  async function fetchBTSData(
+    startDate: string,
+    endDate: string
+  ): Promise<any[]> {
     const url = constructBtsRequest(startDate, endDate);
     const response = await fetch(url);
     return response.json();
   }
 
-  function constructBtsRequest(startDate, endDate) {
+  function constructBtsRequest(startDate: string, endDate: string): string {
     const baseUrl = "https://data.bts.gov/id/keg4-3bc2.json";
     const whereClause = `date between '${startDate}T00:00:00.000' and '${endDate}T00:00:00.000'`;
     const queryParams = new URLSearchParams({
@@ -189,31 +237,36 @@
     return `${baseUrl}?${queryParams.toString()}`;
   }
 
-  function calculateCrossings(data) {
-    const measures = {
-      "Total Travelers": [
+  function calculateCrossings(data: any[]): Record<string, number> {
+    const measures: Record<string, string[]> = {
+      totalTravelers: [
         "Pedestrians",
         "Personal Vehicle Passengers",
         "Bus Passengers",
       ],
-      Vehicles: ["Personal Vehicles", "Buses"],
-      "Cargo Trucks": ["Truck Containers Full", "Truck Containers Empty"],
+      vehicles: ["Personal Vehicles", "Buses"],
+      cargoTrucks: ["Truck Containers Full", "Truck Containers Empty"],
     };
 
-    return Object.entries(measures).reduce((acc, [key, measureList]) => {
-      acc[key] = measureList.reduce(
-        (sum, measure) =>
-          sum +
-          data
-            .filter((el) => el.measure === measure)
-            .reduce((total, el) => total + Number(el.value), 0),
-        0
-      );
-      return acc;
-    }, {});
+    return Object.entries(measures).reduce(
+      (acc, [key, measureList]) => {
+        acc[key] = measureList.reduce(
+          (sum, measure) =>
+            sum +
+            data
+              .filter((el) => el.measure === measure)
+              .reduce((total, el) => total + Number(el.value || 0), 0),
+          0
+        );
+        return acc;
+      },
+      {} as Record<string, number>
+    );
   }
 
-  function formatNumber(num) {
+  function formatNumber(num: number | undefined): string {
+    if (num === undefined) return "N/A";
+    if (isNaN(num)) return "Invalid";
     if (num >= 1000000) {
       return `${(num / 1000000).toFixed(1)} million`;
     }
@@ -223,31 +276,65 @@
     return num.toString();
   }
 
-  function updateStatsUI(stats) {
-    borderCrossingStats = {
-      totalTravelers: formatNumber(stats["Total Travelers"]),
-      vehicles: formatNumber(stats.Vehicles),
-      cargoTrucks: formatNumber(stats["Cargo Trucks"]),
-    };
+  function updateStatsUI(stats: Record<string, number>): void {
+    Object.keys(borderCrossingStats).forEach((key) => {
+      const statKey = key as keyof BorderCrossingStats;
+      const value = stats[key];
+      borderCrossingStats[statKey].value = formatNumber(value);
+      borderCrossingStats[statKey].isLoading = false;
+    });
+    borderCrossingStats = { ...borderCrossingStats };
   }
 
-  function showErrorState() {
-    waitTimes = {
-      allTraffic: { time: "Error", comparison: "Error" },
-      sentri: { time: "Error", comparison: "Error" },
-      readyLane: { time: "Error", comparison: "Error" },
-    };
-    lastUpdated = "Error fetching data";
-    isLoading = false;
-  }
+  async function updateBorderCrossingStats(): Promise<void> {
+    try {
+      const {
+        startDate,
+        endDate,
+        fiscalYear: fy,
+      } = calculatePreviousFiscalYearDates();
+      fiscalYear = fy;
+      isFiscalYearLoading = false;
 
-  $: {
-    if (typeof window !== "undefined") {
-      isLoading = true;
-      fetchAndUpdateWaitTimes().then(() => {
-        isLoading = false;
-      });
+      const data = await fetchBTSData(startDate, endDate);
+      if (!data || !Array.isArray(data)) {
+        throw new Error("Invalid data received from BTS API");
+      }
+      const stats = calculateCrossings(data);
+      updateStatsUI(stats);
+    } catch (error) {
+      console.error("Error fetching border crossing stats:", error);
+      showBorderStatsErrorState();
     }
+  }
+
+  function showBorderStatsErrorState(): void {
+    Object.keys(borderCrossingStats).forEach((key) => {
+      borderCrossingStats[key as keyof BorderCrossingStats] = {
+        value: "Error",
+        isLoading: false,
+      };
+    });
+    fiscalYear = "Error";
+    isFiscalYearLoading = false;
+    borderCrossingStats = { ...borderCrossingStats };
+  }
+
+  function createInitialWaitTime(): WaitTime {
+    return {
+      duration: "Loading...",
+      isDurationLoading: true,
+      comparison: "Loading...",
+      isComparisonLoading: true,
+    };
+  }
+
+  function createInitialBorderCrossingStats(): BorderCrossingStats {
+    return {
+      totalTravelers: { value: "Loading...", isLoading: true },
+      vehicles: { value: "Loading...", isLoading: true },
+      cargoTrucks: { value: "Loading...", isLoading: true },
+    };
   }
 </script>
 
@@ -256,8 +343,8 @@
 
   <div class="card">
     <h2>Select Location</h2>
-    <select bind:value={selectedPort} disabled={isLoading}>
-      {#each Object.entries(portInfo) as [value, { name }]}
+    <select bind:value={selectedPort} disabled={isLoadingPortSelection}>
+      {#each Object.entries(PORT_INFO) as [value, { name }]}
         <option {value}>{name}</option>
       {/each}
     </select>
@@ -283,14 +370,18 @@
           </tr>
         </thead>
         <tbody>
-          {#each laneInfo as { name, key }}
+          {#each LANE_INFO as { name, key }}
             <tr>
-              <td>{portInfo[selectedPort].name} {name}</td>
-              <td class="wait-time"
-                >{isLoading ? "Loading..." : waitTimes[key].time}</td
-              >
+              <td>{PORT_INFO[selectedPort].name} {name}</td>
+              <td class="wait-time">
+                {#if waitTimes[key].isDurationLoading}
+                  Loading...
+                {:else}
+                  {waitTimes[key].duration}
+                {/if}
+              </td>
               <td>
-                {#if isLoading}
+                {#if waitTimes[key].isComparisonLoading}
                   Loading...
                 {:else if waitTimes[key].comparison !== "N/A"}
                   <span
@@ -315,19 +406,21 @@
       </table>
     </div>
     <p class="last-updated">
-      Last Updated: {isLoading ? "Loading..." : lastUpdated}
+      Last Updated: {isLastUpdatedLoading ? "Loading..." : lastUpdated}
     </p>
   </div>
 
   <div class="card">
     <h2>
-      FY {isLoading ? "Loading..." : fiscalYear} Border Crossing Statistics
+      FY {isFiscalYearLoading ? "Loading..." : fiscalYear} Border Crossing Statistics
     </h2>
     <div class="stats-grid">
-      {#each Object.entries(borderCrossingStats) as [key, value]}
+      {#each Object.entries(borderCrossingStats) as [key, { value, isLoading }]}
         <div class="stat-item">
           <p class="stat-label">{key.replace(/([A-Z])/g, " $1").trim()}</p>
-          <p class="stat-value">{isLoading ? "Loading..." : value}</p>
+          <p class="stat-value">
+            {isLoading ? "Loading..." : value}
+          </p>
         </div>
       {/each}
     </div>

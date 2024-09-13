@@ -58,3 +58,17 @@ export const PORTS = {
    * @type {string[]}
    */
   export const TRUCKS = ["Trucks"];
+
+  import type { PortInfo, LaneInfo } from './types';
+
+export const portInfo: Record<string, PortInfo> = {
+  sanYsidro: { name: "San Ysidro", number: 250401 },
+  calexicoEast: { name: "Calexico East", number: 250301 },
+  otayMesa: { name: "Otay Mesa", number: 250601 },
+};
+
+export const laneInfo: LaneInfo[] = [
+  { name: "All Traffic", laneType: 0, key: "allTraffic" },
+  { name: "Sentri", laneType: 1, key: "sentri" },
+  { name: "Ready Lane", laneType: 2, key: "readyLane" },
+];
