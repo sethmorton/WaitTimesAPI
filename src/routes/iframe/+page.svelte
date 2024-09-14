@@ -16,23 +16,29 @@
     BorderCrossingStats,
   } from "$lib/types";
 
-  const PORT_INFO: Record<string, PortInfo> = {
-    sanYsidro: { name: "San Ysidro", number: 250401 },
-    calexicoEast: { name: "Calexico East", number: 250301 },
-    otayMesa: { name: "Otay Mesa", number: 250601 },
-  };
-
-  const LANE_INFO: LaneInfo[] = [
-    { name: "All Traffic", laneType: 0, key: "allTraffic" },
-    { name: "Sentri", laneType: 1, key: "sentri" },
-    { name: "Ready Lane", laneType: 2, key: "readyLane" },
-  ];
+  import { PORT_INFO, LANE_INFO } from "$lib/constants";
 
   let selectedPort: keyof typeof PORT_INFO = "sanYsidro";
   let previousPort: keyof typeof PORT_INFO = selectedPort;
   let isInitialLoad = true;
   let isLoadingPortSelection = false;
-
+  import {
+    createInitialWaitTime,
+    createInitialBorderCrossingStats,
+    formatDate,
+    calculatePercentChange,
+    calculateSixMonthAverage,
+    calculatePreviousFiscalYearDates,
+    calculateCrossings,
+    formatNumber,
+  } from "$lib/utils";
+  import {
+    fetchCurrentWaitTimes,
+    fetchSixMonthData,
+    fetchBTSData,
+    constructWaitTimesApiUrl,
+    constructBtsRequest,
+  } from "$lib/api";
   let waitTimes: WaitTimes = {
     allTraffic: createInitialWaitTime(),
     sentri: createInitialWaitTime(),
@@ -68,7 +74,7 @@
     }
   }
 
-  async function loadData(): Promise<void> {
+  const loadData = async (): Promise<void> => {
     isLoadingPortSelection = true;
     try {
       await Promise.all([
@@ -78,46 +84,21 @@
     } finally {
       isLoadingPortSelection = false;
     }
-  }
+  };
 
-  async function fetchAndUpdateWaitTimes(): Promise<void> {
+  const fetchAndUpdateWaitTimes = async (): Promise<void> => {
     try {
-      const currentData = await fetchCurrentWaitTimes();
+      const currentData = await fetchCurrentWaitTimes(PORT_INFO[selectedPort]);
       updateCurrentWaitTimes(currentData);
-      const sixMonthData = await fetchSixMonthData();
+      const sixMonthData = await fetchSixMonthData(PORT_INFO[selectedPort]);
       updateWithSixMonthAverage(sixMonthData, currentData);
     } catch (error) {
       console.error("Error fetching wait times:", error);
       // Implement error handling UI update here
     }
-  }
+  };
 
-  async function fetchCurrentWaitTimes(): Promise<any[]> {
-    const apiUrl =
-      "https://us-west1-ssp-all-sites.cloudfunctions.net/waitTimesData";
-    const response = await fetch(apiUrl);
-    const data = await response.json();
-    if (data.error) {
-      throw new Error(data.error);
-    }
-    return data.data.filter(
-      (item: any) => item.port_num === PORT_INFO[selectedPort].number
-    );
-  }
-
-  async function fetchSixMonthData(): Promise<any[]> {
-    const endDate = DateTime.now();
-    const startDate = endDate.minus({ months: 6 });
-    const apiUrl = constructApiUrl(startDate, endDate);
-    const response = await fetch(apiUrl);
-    const data = await response.json();
-    if (data.error) {
-      throw new Error(data.error);
-    }
-    return data.data;
-  }
-
-  function constructApiUrl(startDate: DateTime, endDate: DateTime): string {
+  const constructApiUrl = (startDate: DateTime, endDate: DateTime): string => {
     const baseUrl =
       "https://us-west1-ssp-all-sites.cloudfunctions.net/waitTimesData";
     const params = new URLSearchParams({
@@ -127,9 +108,9 @@
       rowCount: "1000000",
     });
     return `${baseUrl}?${params.toString()}`;
-  }
+  };
 
-  function updateCurrentWaitTimes(data: any[]): void {
+  const updateCurrentWaitTimes = (data: any[]): void => {
     LANE_INFO.forEach((info) => {
       const currentData = data.find((item) => item.lane_type === info.laneType);
       if (currentData) {
@@ -144,12 +125,12 @@
       }
     });
     waitTimes = { ...waitTimes };
-  }
+  };
 
-  function updateWithSixMonthAverage(
+  const updateWithSixMonthAverage = (
     sixMonthData: any[],
     currentData: any[]
-  ): void {
+  ): void => {
     LANE_INFO.forEach((info) => {
       const laneData = sixMonthData.filter(
         (item) => item.lane_type === info.laneType
@@ -172,111 +153,9 @@
       waitTimes[info.key].isComparisonLoading = false;
     });
     waitTimes = { ...waitTimes };
-  }
+  };
 
-  function calculateSixMonthAverage(data: any[]): number | null {
-    if (data.length === 0) return null;
-    const sum = data.reduce((acc, item) => acc + item.delay_seconds, 0);
-    return Math.round(sum / data.length);
-  }
-
-  function formatDate(timestamp: Date): string {
-    const date = DateTime.fromJSDate(timestamp).toUTC();
-    return date.toFormat("h:mm a MM/dd/yy");
-  }
-
-  function calculatePercentChange(
-    averageValue: number,
-    currentValue: number
-  ): number {
-    return averageValue !== 0
-      ? ((currentValue - averageValue) / averageValue) * 100
-      : 0;
-  }
-
-  function calculatePreviousFiscalYearDates(): {
-    startDate: string;
-    endDate: string;
-    fiscalYear: string;
-  } {
-    const currentDate = DateTime.now();
-    let fyEnd = DateTime.local(currentDate.year - 1, 9, 30);
-    let fyStart = fyEnd.minus({ years: 1 }).plus({ days: 1 });
-
-    if (currentDate.month > 9) {
-      fyEnd = fyEnd.plus({ years: 1 });
-      fyStart = fyStart.plus({ years: 1 });
-    }
-
-    return {
-      startDate: fyStart.toFormat("yyyy-MM-dd"),
-      endDate: fyEnd.toFormat("yyyy-MM-dd"),
-      fiscalYear: fyEnd.year.toString(),
-    };
-  }
-
-  async function fetchBTSData(
-    startDate: string,
-    endDate: string
-  ): Promise<any[]> {
-    const url = constructBtsRequest(startDate, endDate);
-    const response = await fetch(url);
-    return response.json();
-  }
-
-  function constructBtsRequest(startDate: string, endDate: string): string {
-    const baseUrl = "https://data.bts.gov/id/keg4-3bc2.json";
-    const whereClause = `date between '${startDate}T00:00:00.000' and '${endDate}T00:00:00.000'`;
-    const queryParams = new URLSearchParams({
-      $limit: "100000",
-      $where: whereClause,
-      border: "US-Mexico Border",
-      state: "California",
-    });
-
-    return `${baseUrl}?${queryParams.toString()}`;
-  }
-
-  function calculateCrossings(data: any[]): Record<string, number> {
-    const measures: Record<string, string[]> = {
-      totalTravelers: [
-        "Pedestrians",
-        "Personal Vehicle Passengers",
-        "Bus Passengers",
-      ],
-      vehicles: ["Personal Vehicles", "Buses"],
-      cargoTrucks: ["Truck Containers Full", "Truck Containers Empty"],
-    };
-
-    return Object.entries(measures).reduce(
-      (acc, [key, measureList]) => {
-        acc[key] = measureList.reduce(
-          (sum, measure) =>
-            sum +
-            data
-              .filter((el) => el.measure === measure)
-              .reduce((total, el) => total + Number(el.value || 0), 0),
-          0
-        );
-        return acc;
-      },
-      {} as Record<string, number>
-    );
-  }
-
-  function formatNumber(num: number | undefined): string {
-    if (num === undefined) return "N/A";
-    if (isNaN(num)) return "Invalid";
-    if (num >= 1000000) {
-      return `${(num / 1000000).toFixed(1)} million`;
-    }
-    if (num >= 1000) {
-      return `${(num / 1000).toFixed(1)}k`;
-    }
-    return num.toString();
-  }
-
-  function updateStatsUI(stats: Record<string, number>): void {
+  const updateStatsUI = (stats: Record<string, number>): void => {
     Object.keys(borderCrossingStats).forEach((key) => {
       const statKey = key as keyof BorderCrossingStats;
       const value = stats[key];
@@ -284,9 +163,9 @@
       borderCrossingStats[statKey].isLoading = false;
     });
     borderCrossingStats = { ...borderCrossingStats };
-  }
+  };
 
-  async function updateBorderCrossingStats(): Promise<void> {
+  const updateBorderCrossingStats = async (): Promise<void> => {
     try {
       const {
         startDate,
@@ -306,9 +185,9 @@
       console.error("Error fetching border crossing stats:", error);
       showBorderStatsErrorState();
     }
-  }
+  };
 
-  function showBorderStatsErrorState(): void {
+  const showBorderStatsErrorState = (): void => {
     Object.keys(borderCrossingStats).forEach((key) => {
       borderCrossingStats[key as keyof BorderCrossingStats] = {
         value: "Error",
@@ -318,24 +197,7 @@
     fiscalYear = "Error";
     isFiscalYearLoading = false;
     borderCrossingStats = { ...borderCrossingStats };
-  }
-
-  function createInitialWaitTime(): WaitTime {
-    return {
-      duration: "Loading...",
-      isDurationLoading: true,
-      comparison: "Loading...",
-      isComparisonLoading: true,
-    };
-  }
-
-  function createInitialBorderCrossingStats(): BorderCrossingStats {
-    return {
-      totalTravelers: { value: "Loading...", isLoading: true },
-      vehicles: { value: "Loading...", isLoading: true },
-      cargoTrucks: { value: "Loading...", isLoading: true },
-    };
-  }
+  };
 </script>
 
 <main>

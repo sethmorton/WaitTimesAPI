@@ -1,4 +1,4 @@
-import { CALIPORTS, CALINAMES } from "./constants.js";
+import { CALIPORTS, CALINAMES } from "./constants";
 
 
 export const spec = {

@@ -1,5 +1,5 @@
 import { DateTime } from "luxon";
-import type { WaitTimes, LaneInfo } from "./types";
+import type { WaitTime, BorderCrossingStats } from "./types";
 
 export function formatDate(timestamp: Date): string {
   const date = DateTime.fromJSDate(timestamp).toUTC();
@@ -19,56 +19,6 @@ export function calculateSixMonthAverage(data: any[]): number | null {
   if (data.length === 0) return null;
   const sum = data.reduce((acc, item) => acc + item.delay_seconds, 0);
   return Math.round(sum / data.length);
-}
-
-export function updateCurrentWaitTimes(
-  data: any[],
-  laneInfo: LaneInfo[]
-): WaitTimes {
-  const waitTimes: WaitTimes = {
-    allTraffic: { time: "N/A", comparison: "N/A" },
-    sentri: { time: "N/A", comparison: "N/A" },
-    readyLane: { time: "N/A", comparison: "N/A" },
-  };
-
-  laneInfo.forEach((info) => {
-    const currentData = data.find((item) => item.lane_type === info.laneType);
-    if (currentData) {
-      const waitTime = Math.round(currentData.delay_seconds / 60);
-      waitTimes[info.key].time = `${waitTime} minutes`;
-    }
-  });
-
-  return waitTimes;
-}
-
-export function updateWithSixMonthAverage(
-  sixMonthData: any[],
-  currentData: any[],
-  laneInfo: LaneInfo[],
-  waitTimes: WaitTimes
-): WaitTimes {
-  laneInfo.forEach((info) => {
-    const laneData = sixMonthData.filter(
-      (item) => item.lane_type === info.laneType
-    );
-    const currentLaneData = currentData.find(
-      (item) => item.lane_type === info.laneType
-    );
-    const sixMonthAverageData = calculateSixMonthAverage(laneData);
-
-    if (currentLaneData && sixMonthAverageData) {
-      const percentChange = calculatePercentChange(
-        sixMonthAverageData,
-        currentLaneData.delay_seconds
-      );
-      waitTimes[info.key].comparison = `${Math.abs(
-        Math.round(percentChange)
-      )}%`;
-    }
-  });
-
-  return waitTimes;
 }
 
 export function calculatePreviousFiscalYearDates(): {
@@ -94,13 +44,13 @@ export function calculatePreviousFiscalYearDates(): {
 
 export function calculateCrossings(data: any[]): Record<string, number> {
   const measures: Record<string, string[]> = {
-    "Total Travelers": [
+    totalTravelers: [
       "Pedestrians",
       "Personal Vehicle Passengers",
       "Bus Passengers",
     ],
-    Vehicles: ["Personal Vehicles", "Buses"],
-    "Cargo Trucks": ["Truck Containers Full", "Truck Containers Empty"],
+    vehicles: ["Personal Vehicles", "Buses"],
+    cargoTrucks: ["Truck Containers Full", "Truck Containers Empty"],
   };
 
   return Object.entries(measures).reduce((acc, [key, measureList]) => {
@@ -109,14 +59,16 @@ export function calculateCrossings(data: any[]): Record<string, number> {
         sum +
         data
           .filter((el) => el.measure === measure)
-          .reduce((total, el) => total + Number(el.value), 0),
+          .reduce((total, el) => total + Number(el.value || 0), 0),
       0
     );
     return acc;
   }, {} as Record<string, number>);
 }
 
-export function formatNumber(num: number): string {
+export function formatNumber(num: number | undefined): string {
+  if (num === undefined) return "N/A";
+  if (isNaN(num)) return "Invalid";
   if (num >= 1000000) {
     return `${(num / 1000000).toFixed(1)} million`;
   }
@@ -124,4 +76,21 @@ export function formatNumber(num: number): string {
     return `${(num / 1000).toFixed(1)}k`;
   }
   return num.toString();
+}
+
+export function createInitialWaitTime(): WaitTime {
+  return {
+    duration: "Loading...",
+    isDurationLoading: true,
+    comparison: "Loading...",
+    isComparisonLoading: true,
+  };
+}
+
+export function createInitialBorderCrossingStats(): BorderCrossingStats {
+  return {
+    totalTravelers: { value: "Loading...", isLoading: true },
+    vehicles: { value: "Loading...", isLoading: true },
+    cargoTrucks: { value: "Loading...", isLoading: true },
+  };
 }
