@@ -15,6 +15,7 @@
     PortInfo,
     BorderCrossingStats,
   } from "$lib/types";
+  import { Tooltip } from "@svelte-plugins/tooltips";
 
   import { PORT_INFO, LANE_INFO } from "$lib/constants";
 
@@ -211,7 +212,7 @@
       {/each}
     </select>
   </div>
-
+  
   <div class="card">
     <h2>Current Wait Times</h2>
     <div class="table-container">
@@ -220,18 +221,15 @@
           <tr>
             <th>Lane Type</th>
             <th>Wait Time</th>
-            <th>
-              Comparison to Average
-              <span
-                class="tooltip"
-                title="Percentage change compared to the average wait time over the last 6 months."
-              >
-                <Fa icon={faQuestionCircle} />
-              </span>
+            <th class="comparison-header">
+              <Tooltip content="Percentage change compared to the average wait time over the last 6 months.">
+                <span class="tooltip-trigger">Comparison to Average <Fa icon={faQuestionCircle} /></span>
+              </Tooltip>
             </th>
           </tr>
         </thead>
         <tbody>
+          
           {#each LANE_INFO as { name, key }}
             <tr>
               <td>{PORT_INFO[selectedPort].name} {name}</td>
@@ -271,20 +269,53 @@
       Last Updated: {isLastUpdatedLoading ? "Loading..." : lastUpdated}
     </p>
   </div>
-
-  <!-- <div class="card">
-    <h2>
-      FY {isFiscalYearLoading ? "Loading..." : fiscalYear} Border Crossing Statistics
-    </h2>
-    <div class="stats-grid">
-      {#each Object.entries(borderCrossingStats) as [key, { value, isLoading }]}
-        <div class="stat-item">
-          <p class="stat-label">{key.replace(/([A-Z])/g, " $1").trim()}</p>
-          <p class="stat-value">
-            {isLoading ? "Loading..." : value}
-          </p>
-        </div>
-      {/each}
-    </div>
-  </div> -->
 </main>
+
+
+<style>
+  .tooltip-container {
+    position: relative;
+    display: inline-block;
+    margin-left: 0.25rem;
+  }
+  
+  .tooltip-trigger {
+    cursor: help;
+    display: inline-block;
+  }
+  
+  .tooltip-content {
+    position: fixed; /* Escape the DOM hierarchy of restrictive containers */
+    top: 40%; /* Adjust this value as needed */
+    left: 50%; /* Center horizontally */
+    transform: translate(-50%, -50%);
+    background-color: #000;
+    color: #fff;
+    text-align: left;
+    border-radius: 6px;
+    padding: 0.75rem;
+    width: 250px;
+    z-index: 9999; /* Ensure it's on top */
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.3s ease-in-out, visibility 0.3s ease-in-out;
+  }
+  
+  .tooltip-container:hover .tooltip-content {
+    opacity: 1;
+    visibility: visible;
+  }
+  
+  .tooltip-arrow {
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0;
+    height: 0;
+    border-left: 0.5rem solid transparent;
+    border-right: 0.5rem solid transparent;
+    border-top: 0.5rem solid #000;
+  }
+  </style>
