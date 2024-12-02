@@ -1,9 +1,12 @@
 import { DateTime } from "luxon";
+import type { Luxon } from "luxon";
 import type { WaitTime, BorderCrossingStats } from "./types";
 
-export function formatDate(timestamp: Date): string {
-  const date = DateTime.fromJSDate(timestamp).toUTC();
-  return date.toFormat("h:mm a MM/dd/yy");
+export function formatDate(timestamp: Luxon.DateTime): string {
+  console.log(timestamp);
+  // const date = DateTime.fromJSDate(timestamp).setZone("America/New_York");
+  // return date.toFormat("h:mm a MM/dd/yy 'PST'");
+  return timestamp.toFormat("h:mm a MM/dd/yy 'PST'");
 }
 
 export function calculatePercentChange(

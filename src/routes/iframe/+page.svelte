@@ -7,7 +7,7 @@
     faQuestionCircle,
   } from "@fortawesome/free-solid-svg-icons";
   import { DateTime } from "luxon";
-
+  import './styles.css';
   import type {
     LaneInfo,
     WaitTime,
@@ -117,7 +117,7 @@
         const waitTime = Math.round(currentData.delay_seconds / 60);
         waitTimes[info.key].duration = `${waitTime} minutes`;
         waitTimes[info.key].isDurationLoading = false;
-        lastUpdated = formatDate(new Date(currentData.daterecorded));
+        lastUpdated = DateTime.fromISO(currentData.date).toUTC().toFormat("h:mm a MM/dd/yy 'PST'");
         isLastUpdatedLoading = false;
       } else {
         waitTimes[info.key].duration = "N/A";
@@ -272,7 +272,7 @@
     </p>
   </div>
 
-  <div class="card">
+  <!-- <div class="card">
     <h2>
       FY {isFiscalYearLoading ? "Loading..." : fiscalYear} Border Crossing Statistics
     </h2>
@@ -286,154 +286,5 @@
         </div>
       {/each}
     </div>
-  </div>
+  </div> -->
 </main>
-
-<style>
-  :global(body) {
-    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
-    background-color: #f9fafb;
-    color: #1f2937;
-    line-height: 1.5;
-    margin: 0;
-    padding: 0;
-  }
-
-  main {
-    max-width: 1000px;
-    margin: 2rem auto;
-    padding: 0 1rem;
-  }
-
-  h1 {
-    font-size: 2.5rem;
-    font-weight: 700;
-    text-align: center;
-    color: #111827;
-    margin-bottom: 2rem;
-  }
-
-  h2 {
-    font-size: 1.5rem;
-    font-weight: 600;
-    color: #374151;
-    margin-bottom: 1rem;
-  }
-
-  .card {
-    background-color: white;
-    border-radius: 8px;
-    box-shadow:
-      0 1px 3px rgba(0, 0, 0, 0.1),
-      0 1px 2px rgba(0, 0, 0, 0.06);
-    padding: 1.5rem;
-    margin-bottom: 2rem;
-  }
-
-  select {
-    width: 100%;
-    padding: 0.5rem;
-    font-size: 1rem;
-    border: 1px solid #d1d5db;
-    border-radius: 4px;
-    background-color: white;
-    appearance: none;
-    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
-    background-position: right 0.5rem center;
-    background-repeat: no-repeat;
-    background-size: 1.5em 1.5em;
-  }
-
-  .table-container {
-    overflow-x: auto;
-  }
-
-  table {
-    width: 100%;
-    border-collapse: separate;
-    border-spacing: 0;
-  }
-
-  th,
-  td {
-    padding: 0.75rem 1rem;
-    text-align: left;
-  }
-
-  th {
-    background-color: #f3f4f6;
-    font-weight: 600;
-    text-transform: uppercase;
-    font-size: 0.75rem;
-    color: #6b7280;
-  }
-
-  tr:nth-child(even) {
-    background-color: #f9fafb;
-  }
-
-  .wait-time {
-    font-weight: 600;
-  }
-
-  .comparison {
-    display: inline-flex;
-    align-items: center;
-    padding: 0.25rem 0.5rem;
-    border-radius: 9999px;
-    font-size: 0.75rem;
-    font-weight: 600;
-  }
-
-  .comparison.increase {
-    background-color: #fee2e2;
-    color: #991b1b;
-  }
-
-  .comparison.decrease {
-    background-color: #d1fae5;
-    color: #065f46;
-  }
-
-  .tooltip {
-    cursor: help;
-  }
-
-  .last-updated {
-    font-size: 0.875rem;
-    color: #6b7280;
-    margin-top: 1rem;
-  }
-
-  .stats-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 1rem;
-  }
-
-  .stat-item {
-    background-color: #f3f4f6;
-    padding: 1rem;
-    border-radius: 8px;
-  }
-
-  .stat-label {
-    font-size: 0.875rem;
-    font-weight: 600;
-    color: #6b7280;
-    text-transform: uppercase;
-    margin-bottom: 0.25rem;
-  }
-
-  .stat-value {
-    font-size: 1.5rem;
-    font-weight: 700;
-    color: #111827;
-  }
-
-  @media (max-width: 640px) {
-    .stats-grid {
-      grid-template-columns: 1fr;
-    }
-  }
-</style>

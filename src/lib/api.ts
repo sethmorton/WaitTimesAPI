@@ -1,17 +1,48 @@
 import { DateTime } from "luxon";
-import type { PortInfo } from "./types";
+import type { PortInfo, LatestWaitTimes, WaitTimeData  } from "./types";
+import { LANE_INFO } from "./constants";
 
 export const fetchCurrentWaitTimes = async (
   portInfo: PortInfo
-): Promise<any[]> => {
+): Promise<(WaitTimeData | null)[]> => {
   const apiUrl =
     "https://us-west1-ssp-all-sites.cloudfunctions.net/waitTimesData";
-  const response = await fetch(apiUrl);
-  const data = await response.json();
-  if (data.error) {
-    throw new Error(data.error);
+
+  try {
+    // Fetch data from the API
+    const response = await fetch(apiUrl);
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch data: ${response.statusText}`);
+    }
+
+    const { data, error }: { data: WaitTimeData[]; error?: string } = await response.json();
+
+    if (error) {
+      throw new Error(`API Error: ${error}`);
+    }
+
+    // Extract latest wait time data per lane
+    const latestWaitTimes = LANE_INFO.map((lane) => {
+      // Filter data relevant to the current lane and port
+      const relevantItems = data.filter(
+        (item) => item.lane_type === lane.laneType && item.port_num === portInfo.number
+      );
+
+      // Find the most recent entry or return null if none exist
+      return relevantItems.reduce<WaitTimeData | null>((latest, current) => {
+        return !latest ||
+          DateTime.fromISO(current.daterecorded) > DateTime.fromISO(latest.daterecorded)
+          ? current
+          : latest;
+      }, null);
+    });
+
+    return latestWaitTimes;
+  } catch (error) {
+    console.error("Error fetching wait times:", error instanceof Error ? error.message : error);
+    throw error;
   }
-  return data.data.filter((item: any) => item.port_num === portInfo.number);
 };
 
 export const fetchSixMonthData = async (portInfo: PortInfo): Promise<any[]> => {
